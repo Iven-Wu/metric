@@ -109,6 +109,8 @@ def read_lasr_joints(animal_name,frame=0):
     joint_dir = '/home/yuefanw/scratch/lasr/log/{}-5/save/cam_bone{}.ply'.format(animal_name,frame)
     joint_location = np.array(trimesh.load(joint_dir).vertices)
 
+    joint_location[:,1] *= -1
+
     return joint_location
 
 
