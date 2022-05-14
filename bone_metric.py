@@ -43,6 +43,12 @@ def read_gt_joints(animal_name,frame=0):
     ske = np.load(os.path.join(fpath3, animal_name,'skeleton', 'skeleton_all_frames.npy'), allow_pickle=True).item()[
         'frame_{:06d}'.format(frame+1)]
 
+    info_path = '/projects/perception/datasets/animal_videos/version9/{}/info/{:04d}.npz'.format(animal_name, frame + 1)
+    gt_info = np.load(info_path)
+    gt_cam_rot = gt_info['cam_rot']
+    gt_cam_loc = gt_info['cam_loc']
+
+
     for key in ske.keys():
         head, tail = ske[key]['head'], ske[key]['tail']
         head[[1]] *= -1
@@ -60,7 +66,13 @@ def read_gt_joints(animal_name,frame=0):
         joint_list.append(((ske[key]['head']+ske[key]['tail'])/2)[np.newaxis,:])
 
     joint_array = np.concatenate(joint_list, axis=0)
-    return joint_array
+
+    # pdb.set_trace()
+
+    joint_array_new = joint_array @ gt_cam_rot
+    joint_array_new[:,-1] += np.linalg.norm(gt_cam_loc)
+
+    return joint_array_new
     # if np.linalg.norm(ske[key]['head'] - ske[ske[key]['parent']]['tail']) > 1e-6:
     #     ske[key]['head'],ske[key]['tail'] = ske[key]['tail'] , ske[key]['head']
     # print(key)
@@ -104,6 +116,8 @@ def read_lasr_joints(animal_name,frame=0):
 if __name__ =='__main__':
 
     joint_array = read_gt_joints('aardvark_female')
+
+    pdb.set_trace()
 
     joint_array2 = read_lasr_joints('aardvark_female')
     pdb.set_trace()
