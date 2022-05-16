@@ -220,16 +220,16 @@ class lasr_skin():
     def get_points(self):
 
         ### for gen
-        self.source_root = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/'.format(self.animal_name)
-        s_mesh_path = '{}/pred{}.ply'.format(self.source_root,self.frame)
-        s_cam_path = '{}/cam{}.txt'.format(self.source_root, self.frame)
-        s_joint_dir = '{}/cam_bone{}.ply'.format(self.source_root, self.frame)
+        # self.source_root = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/'.format(self.animal_name)
+        # s_mesh_path = '{}/pred{}.ply'.format(self.source_root,self.frame)
+        # s_cam_path = '{}/cam{}.txt'.format(self.source_root, self.frame)
+        # s_joint_dir = '{}/cam_bone{}.ply'.format(self.source_root, self.frame)
 
-        # self.source_root = '/home/yuefanw/scratch/viser-release/log/{}-6/save'.format(self.animal_name)
-        #
-        # s_mesh_path = '{}/{}-vp1pred{}.obj'.format(self.source_root,self.animal_name,self.frame)
-        # s_cam_path = '{}/{}-cam{}.txt'.format(self.source_root, self.animal_name,self.frame)
-        # s_joint_dir = '{}/{}-bones{}.npy'.format(self.source_root,self.animal_name, self.frame)
+        self.source_root = '/home/yuefanw/scratch/viser-release/log/{}-6/save'.format(self.animal_name)
+
+        s_mesh_path = '{}/{}-vp1pred{}.obj'.format(self.source_root,self.animal_name,self.frame)
+        s_cam_path = '{}/{}-cam{}.txt'.format(self.source_root, self.animal_name,self.frame)
+        s_joint_dir = '{}/{}-bones{}.npy'.format(self.source_root,self.animal_name, self.frame)
 
         s_mesh = trimesh.load(s_mesh_path)
         s_cam = np.loadtxt(s_cam_path)
@@ -272,9 +272,13 @@ class lasr_skin():
 
 
         ### changing scale
-        matrix = np.eye(4)
-        matrix[:3, :3] *= target_focal/source_focal
-        s_mesh.apply_transform(matrix)
+        # matrix = np.eye(4)
+        # matrix[:3, :3] *= target_focal/source_focal
+        # s_mesh.apply_transform(matrix)
+        s_mean = np.mean(s_mesh.vertices,axis=0)
+        s_mesh.vertices -= s_mean
+        s_mesh.vertices *= source_focal/target_focal
+        s_mesh.vertices += s_mean
 
         s_mesh.vertices[:,1] -= s_mesh.vertices[:,1].min()
         t_mesh.vertices[:,1] -= t_mesh.vertices[:,1].min()
@@ -282,6 +286,9 @@ class lasr_skin():
         init_scale = t_mesh.vertices[:, -1].mean() / s_mesh.vertices[:, -1].mean()
 
         s_mesh.vertices *= (init_scale)
+
+        mat, trans, cost = trimesh.registration.icp(s_mesh.vertices, t_mesh.vertices, max_iterations=1000)
+        s_mesh.vertices = trans
 
         # pdb.set_trace()
         # s_joints = np.array(s_mesh.vertices)[-joint_num:,:]
@@ -310,10 +317,6 @@ class lasr_skin():
                 t_index = np.where(t_weight[t_bone]>0.01)[0]
                 t_points_loc = t_mesh_p[t_index]
 
-                # pdb.set_trace()
-                # print('s_points_loc',s_points_loc.shape)
-                # print('t_points_loc',t_points_loc.shape)
-                # pdb.set_trace()
 
                 if t_points_loc.shape[0]==0:
                     cost_matrix[s_bone,t_bone] = 100
@@ -321,9 +324,13 @@ class lasr_skin():
                     cost_matrix[s_bone,t_bone] = self.chamfer_dist(s_points_loc,t_points_loc)
 
                 # pdb.set_trace()
+        # pdb.set_trace()
 
         row_ind,col_ind = scipy.optimize.linear_sum_assignment(cost_matrix)
-        min_cost = cost_matrix[row_ind,col_ind].sum()
+
+        # min_cost = cost_matrix[row_ind,col_ind].sum()
+        min_cost = cost_matrix[row_ind, col_ind].mean()
+
 
         # pdb.set_trace()
         return min_cost
@@ -387,12 +394,16 @@ if __name__ =='__main__':
                       'common_ostrich_male'
                       ]
 
+    skin_list = []
     for animal in val_split_list:
         print("For animal ",animal)
         cal = lasr_skin(animal_name=animal)
         skin_dis = cal.calculate_skin_distance()
 
         print(skin_dis)
+
+        skin_list.append(skin_dis)
+    print("AVG skin ",np.array(skin_list).mean())
     # bone_CD = []
     # for animal in val_split_list:
     #     print("For animal ",animal)

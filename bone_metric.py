@@ -90,7 +90,7 @@ def read_lasr_joints(animal_name,frame=0):
     source_focal = cam_mat[-1, 0]
 
 
-    pdb.set_trace()
+    # pdb.set_trace()
     s_mesh.vertices = np.concatenate(s_mesh.vertices,joint_location)
 
 
@@ -174,13 +174,13 @@ class lasr_CD_B2B():
     def get_gen_joints(self):
 
         ### for gen
-        # s_mesh_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/pred{}.ply'.format(self.animal_name,self.frame)
-        # s_cam_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam{}.txt'.format(self.animal_name, self.frame)
-        # s_joint_dir = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam_bone{}.ply'.format(self.animal_name, self.frame)
+        s_mesh_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/pred{}.ply'.format(self.animal_name,self.frame)
+        s_cam_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam{}.txt'.format(self.animal_name, self.frame)
+        s_joint_dir = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam_bone{}.ply'.format(self.animal_name, self.frame)
 
-        s_mesh_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-vp1pred{}.obj'.format(self.animal_name,self.animal_name,self.frame)
-        s_cam_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-cam{}.txt'.format(self.animal_name, self.animal_name,self.frame)
-        s_joint_dir = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-bones{}.npy'.format(self.animal_name,self.animal_name, self.frame)
+        # s_mesh_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-vp1pred{}.obj'.format(self.animal_name,self.animal_name,self.frame)
+        # s_cam_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-cam{}.txt'.format(self.animal_name, self.animal_name,self.frame)
+        # s_joint_dir = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-bones{}.npy'.format(self.animal_name,self.animal_name, self.frame)
 
 
         s_mesh = trimesh.load(s_mesh_path)
@@ -216,9 +216,13 @@ class lasr_CD_B2B():
 
 
         ### changing scale
-        matrix = np.eye(4)
-        matrix[:3, :3] *= target_focal/source_focal
-        s_mesh.apply_transform(matrix)
+        # matrix = np.eye(4)
+        # matrix[:3, :3] *= target_focal/source_focal
+        # s_mesh.apply_transform(matrix)
+        s_mean = np.mean(s_mesh.vertices,axis=0)
+        s_mesh.vertices -= s_mean
+        s_mesh.vertices *= source_focal/target_focal
+        s_mesh.vertices += s_mean
 
         s_mesh.vertices[:,1] -= s_mesh.vertices[:,1].min()
         t_mesh.vertices[:,1] -= t_mesh.vertices[:,1].min()
@@ -226,6 +230,9 @@ class lasr_CD_B2B():
         init_scale = t_mesh.vertices[:, -1].mean() / s_mesh.vertices[:, -1].mean()
 
         s_mesh.vertices *= (init_scale)
+
+        mat, trans, cost = trimesh.registration.icp(s_mesh.vertices, t_mesh.vertices, max_iterations=1000)
+        s_mesh.vertices = trans
 
         # pdb.set_trace()
         s_joints = np.array(s_mesh.vertices)[-joint_num:,:]
