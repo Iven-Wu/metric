@@ -108,8 +108,19 @@ def get_cost_matrix(s_mesh,animal_name):
 
     s_mesh_p = s_mesh.vertices
 
-    source_root = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/'.format(animal_name)
+    # source_root = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/'.format(animal_name)
+    source_root = '/home/yuefanw/scratch/viser-release/log/{}-6/save/'.format(animal_name)
     target_root = '/home/yuefanw/scratch/simplified_meshes/simplified_meshes/{}'.format(animal_name)
+
+    target_info_path = '/projects/perception/datasets/animal_videos/version9/{}/info/0001.npz'.format(animal_name)
+    t_info = np.load(target_info_path)
+
+    t_cam_rot = t_info['cam_rot']
+    t_cam_loc = t_info['cam_loc']
+    # t_mesh.vertices = t_mesh.vertices @ t_cam_rot
+    # t_mesh.vertices[:, -1] += np.linalg.norm(t_cam_loc)
+
+
 
     s_weight = np.load(os.path.join(source_root,'skin.npy'))
     t_weight = np.load(os.path.join(target_root,'W1.npy')).T
@@ -117,6 +128,21 @@ def get_cost_matrix(s_mesh,animal_name):
 
     t_p,t_n,t_f = read_obj(os.path.join(target_root,'remesh.obj'))
     t_mesh_p = t_p
+
+    t_mesh_p = t_mesh_p @ t_cam_rot
+    t_mesh_p[:,-1] += np.linalg.norm(t_cam_loc)
+
+    t_mesh_p[:,0] -= t_mesh_p[:,0].min()
+    t_mesh_p[:,1] -= t_mesh_p[:,1].min()
+
+    # pdb.set_trace()
+
+    # t_mesh_p[:,0] -= t_mesh_p[:,0].min()
+    # t_mesh_p[:,1] -= t_mesh_p[:,1].min()
+    # s_mesh.vertices[:, 0] -= s_mesh.vertices[:, 0].min()
+    # t_mesh.vertices[:, 0] -= t_mesh.vertices[:, 0].min()
+    # s_mesh.vertices[:, 1] -= s_mesh.vertices[:, 1].min()
+    # t_mesh.vertices[:, 1] -= t_mesh.vertices[:, 1].min()
 
     # if t_weight[-1].sum() < 0.1:
     #     t_weight
@@ -168,17 +194,19 @@ def get_cam_IOU(animal_name):
     sample_num = 0
     for frame in tqdm(range(30)):
     # for frame in tqdm(range(31,35)):
-        source_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/pred{}.ply'.format(animal_name,frame)
-        source_cam_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam{}.txt'.format(animal_name, frame)
-        s_joint_dir = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam_bone{}.ply'.format(animal_name, frame)
+    #     source_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/pred{}.ply'.format(animal_name,frame)
+    #     source_cam_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam{}.txt'.format(animal_name, frame)
+    #     s_joint_dir = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam_bone{}.ply'.format(animal_name, frame)
 
+        source_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-vp1pred{}.obj'.format(animal_name,animal_name, frame)
+        source_cam_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-cam{}.txt'.format(animal_name,animal_name, frame)
+        s_joint_dir = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-bones{}.npy'.format(animal_name, animal_name,frame)
 
         cam_mat = np.loadtxt(source_cam_path)
         source_focal = cam_mat[-1,0]
 
         target_path = '/projects/perception/datasets/animal_videos/version9/{}/frame_{:06d}.obj'.format(animal_name,frame+1)
 
-        # source_cam_path = '/home/yuefanw/scratch/lasr/log/{}-5/save/{}.txt'.format(animal_name,frame)
         target_info_path = '/projects/perception/datasets/animal_videos/version9/{}/info/{:04d}.npz'.format(animal_name,frame+1)
         gt_ske_all = \
             np.load(os.path.join('/projects/perception/datasets/animal_videos/version9', animal_name, 'skeleton', 'skeleton_all_frames.npy'), allow_pickle=True).item()
