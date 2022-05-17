@@ -109,7 +109,8 @@ def get_cost_matrix(s_mesh,animal_name):
     s_mesh_p = s_mesh.vertices
 
     # source_root = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/'.format(animal_name)
-    source_root = '/home/yuefanw/scratch/viser-release/log/{}-6/save/'.format(animal_name)
+    # source_root = '/home/yuefanw/scratch/viser-release/log/{}-6/save/'.format(animal_name)
+    source_root = '/home/yuefanw/scratch/test_optim_ske11/{}/Epoch_201/temparray'.format(animal_name)
     target_root = '/home/yuefanw/scratch/simplified_meshes/simplified_meshes/{}'.format(animal_name)
 
     target_info_path = '/projects/perception/datasets/animal_videos/version9/{}/info/0001.npz'.format(animal_name)
@@ -122,7 +123,7 @@ def get_cost_matrix(s_mesh,animal_name):
 
 
 
-    s_weight = np.load(os.path.join(source_root,'skin.npy'))
+    s_weight = np.load(os.path.join(source_root,'W1.npy')).T
     t_weight = np.load(os.path.join(target_root,'W1.npy')).T
 
 
@@ -152,6 +153,9 @@ def get_cost_matrix(s_mesh,animal_name):
     # pdb.set_trace()
 
     cost_matrix = np.zeros((s_weight.shape[0],t_weight.shape[0]))
+
+    # pdb.set_trace()
+
     for s_bone in range(s_weight.shape[0]):
         # s_weight[]
         # pdb.set_trace()
@@ -168,8 +172,6 @@ def get_cost_matrix(s_mesh,animal_name):
             else:
                 cost_matrix[s_bone,t_bone] = chamfer_dist(s_points_loc,t_points_loc)
 
-            # pdb.set_trace()
-    # pdb.set_trace()
 
     row_ind,col_ind = scipy.optimize.linear_sum_assignment(cost_matrix)
 
@@ -198,12 +200,24 @@ def get_cam_IOU(animal_name):
     #     source_cam_path = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam{}.txt'.format(animal_name, frame)
     #     s_joint_dir = '/home/yuefanw/scratch/lasr/raw_log/{}-5/save/cam_bone{}.ply'.format(animal_name, frame)
 
-        source_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-vp1pred{}.obj'.format(animal_name,animal_name, frame)
-        source_cam_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-cam{}.txt'.format(animal_name,animal_name, frame)
-        s_joint_dir = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-bones{}.npy'.format(animal_name, animal_name,frame)
+        # source_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-vp1pred{}.obj'.format(animal_name,animal_name, frame)
+        # source_cam_path = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-cam{}.txt'.format(animal_name,animal_name, frame)
+        # s_joint_dir = '/home/yuefanw/scratch/viser-release/log/{}-6/save/{}-bones{}.npy'.format(animal_name, animal_name,frame)
 
-        cam_mat = np.loadtxt(source_cam_path)
-        source_focal = cam_mat[-1,0]
+        source_path = '/home/yuefanw/scratch/test_optim_ske11/{}/Epoch_201'.format(animal_name)
+
+        source_mesh_path = '{}/Frame{}.obj'.format(source_path,frame+1)
+        source_cam_path = '/projects/perception/datasets/animal_videos/version9/{}/info/{:04d}.npz'.format(animal_name,frame+1)
+        s_joint_dir = '{}/temparray/ske.npy'.format(source_path)
+
+        ske_dict = np.load(s_joint_dir,allow_pickle=True).item()
+
+
+
+
+        # cam_mat = np.loadtxt(source_cam_path)
+        cam_mat = np.load(source_cam_path)['intrinsic_mat']
+        source_focal = cam_mat[0,0]
 
         target_path = '/projects/perception/datasets/animal_videos/version9/{}/frame_{:06d}.obj'.format(animal_name,frame+1)
 
@@ -224,25 +238,46 @@ def get_cam_IOU(animal_name):
 
         t_info = np.load(target_info_path)
 
-        s_mesh = trimesh.load(source_path,process=False)
+        s_mesh = trimesh.load(source_mesh_path,process=False)
+
+        s_p,s_n,s_f = read_obj(source_mesh_path)
+        s_mesh.vertices = s_p
+        s_mesh.faces = s_f
+
+
         t_mesh = trimesh.load(target_path,process=False)
 
+        # pdb.set_trace()
         t_mesh.vertices = t_mesh.vertices[:, [0, 2, 1]]
         t_mesh.vertices[:, 1] *= -1
 
-        if s_joint_dir[-4:] == '.npy':
-            s_joint = np.load(s_joint_dir)
-        else:
-            s_joint = trimesh.load(s_joint_dir,process=False).vertices
+        # if s_joint_dir[-4:] == '.npy':
+        #     s_joint = np.load(s_joint_dir)
+        # else:
+        #     s_joint = trimesh.load(s_joint_dir,process=False).vertices
 
-        source_joint_num = len(s_joint)
-        s_mesh.vertices = np.concatenate((s_mesh.vertices, s_joint))
+        s_joint = []
+        for key in ske_dict.keys():
+            if key=='def_c_root_joint':
+                continue
 
-        gt_joint_num = len(gt_joint_array)
-        t_mesh.vertices = np.concatenate((t_mesh.vertices,gt_joint_array))
+            if 'joey' in key:
+                continue
+            # print(key)
+            head = ske_dict[key]['new_head'][frame]
+            tail = ske_dict[key]['new_tail'][frame]
+            s_joint.append(((head + tail) / 2)[np.newaxis, :])
+
+        # pdb.set_trace()
+        s_joint_array = np.concatenate(s_joint, axis=0)
 
         # pdb.set_trace()
 
+        source_joint_num = len(s_joint_array)
+        s_mesh.vertices = np.concatenate((s_mesh.vertices, s_joint_array))
+
+        gt_joint_num = len(gt_joint_array)
+        t_mesh.vertices = np.concatenate((t_mesh.vertices,gt_joint_array))
 
 
         #### gt_mesh_coord
@@ -255,7 +290,16 @@ def get_cam_IOU(animal_name):
         target_focal = t_info['intrinsic_mat'][0,0]
 
         #### pred_mesh_coord
-        s_mesh.vertices[:,[1]] *= -1
+        # s_mesh.vertices[:,[1]] *= -1
+        s_mesh.vertices = s_mesh.vertices[:, [0, 2, 1]]
+        s_mesh.vertices[:, 1] *= -1
+
+        s_mesh.vertices = s_mesh.vertices @ t_cam_rot
+        s_mesh.vertices[:,-1] += np.linalg.norm(t_cam_loc)
+
+
+
+        # pdb.set_trace()
 
         s_mean = np.mean(s_mesh.vertices,axis=0)
         s_mesh.vertices -= s_mean
