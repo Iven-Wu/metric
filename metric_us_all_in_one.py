@@ -104,7 +104,7 @@ def read_gt_joints(animal_name,frame):
     return joint_array_new
 
 
-def get_cost_matrix(s_mesh,animal_name):
+def get_skin_cost(s_mesh,animal_name):
 
     s_mesh_p = s_mesh.vertices
 
@@ -159,11 +159,11 @@ def get_cost_matrix(s_mesh,animal_name):
     for s_bone in range(s_weight.shape[0]):
         # s_weight[]
         # pdb.set_trace()
-        s_index = np.where(s_weight[s_bone]>0.01)[0]
+        s_index = np.where(s_weight[s_bone]>1e-4)[0]
         s_points_loc = s_mesh_p[s_index]
 
         for t_bone in range(t_weight.shape[0]):
-            t_index = np.where(t_weight[t_bone]>0.01)[0]
+            t_index = np.where(t_weight[t_bone]>1e-4)[0]
             t_points_loc = t_mesh_p[t_index]
 
 
@@ -323,15 +323,16 @@ def get_cam_IOU(animal_name):
 
         # pdb.set_trace()
         ### icp, trans is result pcd, mat is rotation matrix
-        mat, trans, cost = trimesh.registration.icp(s_mesh.vertices, t_mesh.vertices, max_iterations=1000)
-
-        s_mesh.vertices = trans
+        # mat, trans, cost = trimesh.registration.icp(s_mesh.vertices, t_mesh.vertices, max_iterations=1000)
+        #
+        # s_mesh.vertices = trans
 
         # s_mesh_tmp = np.concatenate((np.array(s_mesh.vertices), np.ones((s_mesh.vertices.shape[0],1)) ),axis=1)
         # rot_result = (mat@s_mesh_tmp.T).T
 
         factor_list = [0.95,0.96,0.97,0.98,0.99,1,1.01,1.02,1.03,1.04,1.05]
 
+        # factor_list = [1]
 
         tmp_record = []
         for factor in factor_list:
@@ -362,12 +363,15 @@ def get_cam_IOU(animal_name):
 
 
         bone_CD = cham_loss(torch.tensor(s_joints)[None,:].float().cuda(),
-                            torch.tensor(t_joints)[None,:].float().cuda())[0].mean()
+                            torch.tensor(t_joints)[None,:].float().cuda())[0].mean() + cham_loss(torch.tensor(s_joints)[None,:].float().cuda(),
+                            torch.tensor(t_joints)[None,:].float().cuda())[1].mean()
+
         chamfer_loss = cham_loss(torch.tensor(np.array(s_mesh.vertices))[None, :].float().cuda(),
-                  torch.tensor(np.array(t_mesh.vertices))[None, :].float().cuda())[0].mean()
+                  torch.tensor(np.array(t_mesh.vertices))[None, :].float().cuda())[0].mean() + cham_loss(torch.tensor(np.array(s_mesh.vertices))[None, :].float().cuda(),
+                  torch.tensor(np.array(t_mesh.vertices))[None, :].float().cuda())[1].mean()
 
         if frame==0:
-            min_cost = get_cost_matrix(s_mesh,animal_name=animal_name)
+            min_cost = get_skin_cost(s_mesh,animal_name=animal_name)
             skin_list.append(min_cost)
         iou_list.append(iou)
 
