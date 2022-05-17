@@ -27,6 +27,11 @@ from imageio import imread
 
 from lietorch import SO3, SE3, LieGroupParameter
 
+from scipy.spatial import cKDTree as KDTree
+import trimesh
+
+from tqdm import tqdm
+
 cham_loss = chamfer_3DDist()
 
 def read_obj(obj_path, for_open_mesh=False):
@@ -85,6 +90,7 @@ def LBS(x, W1, T, R):
 
     return wbx
 
+
 def load_data(animal_name='aardvark_female',frame=40):
     data_root = '/scratch/users/yuefanw/lasr/raw_log/{}-5/save'.format(animal_name)
     # gen_p,gen_n,gen_f = read_obj(os.path.join(data_root,'pred0.ply'))
@@ -108,6 +114,8 @@ def load_data(animal_name='aardvark_female',frame=40):
     t_mesh.vertices = t_mesh.vertices @ t_cam_rot
     t_mesh.vertices[:, -1] += np.linalg.norm(t_cam_loc)
 
+    # pdb.set_trace()
+
     target_focal = t_info['intrinsic_mat'][0, 0]
 
     s_mesh.vertices[:, [1]] *= -1
@@ -118,12 +126,18 @@ def load_data(animal_name='aardvark_female',frame=40):
 
     s_mesh.vertices[:, 1] -= s_mesh.vertices[:, 1].min()
     t_mesh.vertices[:, 1] -= t_mesh.vertices[:, 1].min()
+    s_mesh.vertices[:,0] -= s_mesh.vertices[:,0].min()
+    t_mesh.vertices[:,0] -= t_mesh.vertices[:,0].min()
+
+    # pdb.set_trace()
 
     init_scale = t_mesh.vertices[:, -1].mean() / s_mesh.vertices[:, -1].mean()
     s_mesh.vertices *= (init_scale)
 
     s_mesh.vertices -= np.mean(t_mesh.vertices,axis=0)
     t_mesh.vertices -= np.mean(t_mesh.vertices,axis=0)
+
+    # pdb.set_trace()
     #############################################
 
     ### root transformation
@@ -135,16 +149,14 @@ def load_data(animal_name='aardvark_female',frame=40):
     return s_mesh,t_mesh,skinning
 
 def minimize_chamfer(animal='aardvark_female',frame=40):
-    s_mesh,t_mesh,skinning = load_data(animal_name=animal, frame=40)
+    s_mesh,t_mesh,skinning = load_data(animal_name=animal, frame=frame)
     bone_number = skinning.shape[0]
     s_point_number = skinning.shape[1]
     t_point_number = t_mesh.vertices.shape[0]
     t_point = torch.tensor(t_mesh.vertices)[None,:].float().cuda()
 
-    # pdb.set_trace()
     x = torch.tensor(np.array(s_mesh.vertices)).cuda()
-    # pdb.set_trace()
-    # pdb.set_trace()
+
     x = torch.cat([x,torch.ones((x.shape[0],1)).cuda()],dim=1).float()
 
     W = torch.tensor(skinning,device='cuda').T.float()
@@ -169,7 +181,9 @@ def minimize_chamfer(animal='aardvark_female',frame=40):
     optimizer = optim.Adam([p1], lr=5e-3)
 
 
-    for epoch in range(10):
+    # pbar = tqdm(range(1000))
+    pbar = range(1500)
+    for epoch in pbar:
         T = torch.randn(Frames, bone_number, 4, 4).cuda()  # T refers to bone transformations
         R = torch.randn(Frames, 4, 4).cuda()  # R refers to the root transformation
         # for idx, gt_idx in enumerate(index):
@@ -179,24 +193,66 @@ def minimize_chamfer(animal='aardvark_female',frame=40):
                 R_temp = SE3.InitFromVec(p1[gt_idx, b])
                 T[idx, b] = R_temp.matrix()
 
-        # pdb.set_trace()
         wbx = LBS(x, W, T, R)
-
-        # pdb.set_trace()
 
         optimizer.zero_grad()
 
+        c_loss = cham_loss(wbx[:,:,:-1],t_point)[0].mean() + cham_loss(wbx[:,:,:-1],t_point)[1].mean()
         # pdb.set_trace()
-        c_loss = cham_loss(wbx[:,:,:-1],t_point)[0].mean()
-        print(c_loss.item())
+        # print(c_loss.item())
         c_loss.backward()
         optimizer.step()
 
-    s_mesh.vertices = wbx[0,:,:-1].detach().cpu().numpy()
-    s_mesh.export('s_ac.obj')
+        # pbar.set_postfix(loss=c_loss.item())
+
+    # print(c_loss.item())
+    # s_mesh.vertices = wbx[0,:,:-1].detach().cpu().numpy()
+    # s_mesh.export('s_ac.obj')
+
+    return c_loss.item()
 
 
 
 if __name__ =='__main__':
     # load_data()
-    minimize_chamfer()
+
+    val_split_list = [
+                    'aardvark_female',
+                      'aardvark_juvenile',
+                      'aardvark_male',
+                      'african_elephant_female',
+                      'african_elephant_male',
+                      'african_elephant_juvenile',
+                      'binturong_female',
+                      'binturong_juvenile',
+                      'binturong_male',
+                      'grey_seal_female',
+                      'grey_seal_juvenile',
+                      'grey_seal_male',
+                      'bonobo_juvenile',
+                      'bonobo_male',
+                      'bonobo_female',
+                      'polar_bear_female',
+                      'polar_bear_juvenile',
+                      'polar_bear_male',
+                      'gray_wolf_female',
+                      'gray_wolf_juvenile',
+                      'gray_wolf_male',
+                      'common_ostrich_female',
+                      'common_ostrich_juvenile',
+                      'common_ostrich_male'
+                      ]
+    frame_list = [40, 60, 80, 100, 120, 140]
+
+    general_record = {}
+    for frame in frame_list:
+
+        cd_record = []
+        for animal in val_split_list:
+
+            print("Animal {}, frame {}".format(animal,frame))
+            min_cd = minimize_chamfer(animal=animal,frame=frame)
+            cd_record.append(min_cd)
+        general_record[frame] = np.array(cd_record).mean()
+
+    print(general_record)
